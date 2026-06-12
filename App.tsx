@@ -494,10 +494,12 @@ useEffect(() => {
     const assignmentNow = nowMs();
 
     updateBattery(batteryId, (b) => ({
-      ...b,
-      currentPortId: portId,
-      sessionStartMs: assignmentNow,
-    }));
+  ...b,
+  totalChargedSec: 0,
+  currentPortId: portId,
+  sessionStartMs: assignmentNow,
+  lastChargedAtMs: null,
+}));
 
     updatePort(portId, (p) => ({
       ...p,
