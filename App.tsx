@@ -8,7 +8,12 @@ import {
   Text,
   TextInput,
   View,
+  StatusBar,
 } from "react-native";
+
+import { NavigationBar } from "expo-navigation-bar";
+
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type TabKey = "dashboard" | "ports" | "batteries" | "groups" | "log" | "settings";
 
@@ -62,24 +67,27 @@ const PALETTE = [
 const nowMs = () => Date.now();
 
 const INITIAL_TOTALS: Record<number, number> = {
-  1: 4 * 3600 + 22 * 60,
-  2: 6 * 3600 + 5 * 60,
-  3: 3 * 3600 + 18 * 60,
-  7: 2 * 3600 + 54 * 60,
-  11: 5 * 3600 + 33 * 60,
+  // 1: 4 * 3600 + 22 * 60,
+  // 2: 6 * 3600 + 5 * 60,
+  // 3: 3 * 3600 + 18 * 60,
+  // 7: 2 * 3600 + 54 * 60,
+  // 11: 5 * 3600 + 33 * 60,
 };
 
 const INITIAL_PORTS: Record<number, number> = {
-  3: 2,
-  7: 1,
-  11: 3,
+  // 3: 2,
+  // 7: 1,
+  // 11: 3,
 };
 
 const INITIAL_SESSION_OFFSETS_MS: Record<number, number> = {
-  3: 58 * 60 * 1000,
-  7: 102 * 60 * 1000,
-  11: 130 * 60 * 1000,
+  // 3: 58 * 60 * 1000,
+  // 7: 102 * 60 * 1000,
+  // 11: 130 * 60 * 1000,
 };
+
+const STORAGE_KEY = "frc-battery-manager-state";
+const HAS_SEEN_ONBOARDING_KEY = "frc-battery-manager-seeded";
 
 function createInitialBatteries(count: number): Battery[] {
   const membersA = new Set([1, 4, 7, 9, 11]);
@@ -107,39 +115,39 @@ function createInitialBatteries(count: number): Battery[] {
 
 function createInitialPorts(): Port[] {
   return [
-    { id: 1, amps: 6, batteryId: 7, assignedAtMs: nowMs() - 102 * 60 * 1000 },
-    { id: 2, amps: 6, batteryId: 3, assignedAtMs: nowMs() - 58 * 60 * 1000 },
-    { id: 3, amps: 6, batteryId: 11, assignedAtMs: nowMs() - 130 * 60 * 1000 },
-    { id: 4, amps: 6, batteryId: null, assignedAtMs: null },
+    // { id: 1, amps: 6, batteryId: 7, assignedAtMs: nowMs() - 102 * 60 * 1000 },
+    // { id: 2, amps: 6, batteryId: 3, assignedAtMs: nowMs() - 58 * 60 * 1000 },
+    // { id: 3, amps: 6, batteryId: 11, assignedAtMs: nowMs() - 130 * 60 * 1000 },
+    // { id: 4, amps: 6, batteryId: null, assignedAtMs: null },
   ];
 }
 
 function createInitialGroups(): Group[] {
   return [
-    {
-      id: "group-a",
-      name: "Competition batteries",
-      targetSec: parseTimeInput("2h 30m"),
-      notify: true,
-      color: PALETTE[0].bg,
-      memberIds: [1, 4, 7, 9, 11],
-    },
-    {
-      id: "group-b",
-      name: "Practice batteries",
-      targetSec: parseTimeInput("1h 45m"),
-      notify: true,
-      color: PALETTE[1].bg,
-      memberIds: [2, 3, 6, 10],
-    },
-    {
-      id: "group-c",
-      name: "Backup / testing",
-      targetSec: parseTimeInput("3h 00m"),
-      notify: false,
-      color: PALETTE[2].bg,
-      memberIds: [5, 8, 12],
-    },
+    // {
+    //   id: "group-a",
+    //   name: "Competition batteries",
+    //   targetSec: parseTimeInput("2h 30m"),
+    //   notify: true,
+    //   color: PALETTE[0].bg,
+    //   memberIds: [1, 4, 7, 9, 11],
+    // },
+    // {
+    //   id: "group-b",
+    //   name: "Practice batteries",
+    //   targetSec: parseTimeInput("1h 45m"),
+    //   notify: true,
+    //   color: PALETTE[1].bg,
+    //   memberIds: [2, 3, 6, 10],
+    // },
+    // {
+    //   id: "group-c",
+    //   name: "Backup / testing",
+    //   targetSec: parseTimeInput("3h 00m"),
+    //   notify: false,
+    //   color: PALETTE[2].bg,
+    //   memberIds: [5, 8, 12],
+    // },
   ];
 }
 
@@ -290,49 +298,79 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
   const [now, setNow] = useState(nowMs());
 
-  const [batteries, setBatteries] = useState<Battery[]>(() => createInitialBatteries(12));
-  const [ports, setPorts] = useState<Port[]>(() => createInitialPorts());
-  const [groups, setGroups] = useState<Group[]>(() => createInitialGroups());
-  const [logs, setLogs] = useState<LogEntry[]>([
-    {
-      id: uid("log"),
-      type: "removed",
-      title: "Battery #01 removed from Port 2",
-      detail: "Sent to field · total session 1h 15m",
-      timeMs: nowMs() - 2 * 60 * 60 * 1000 + 32 * 60 * 1000,
-    },
-    {
-      id: uid("log"),
-      type: "completed",
-      title: "Battery #02 reached target charge time",
-      detail: "Port 1 · Group B · now fully charged",
-      timeMs: nowMs() - 2 * 60 * 60 * 1000 + 58 * 60 * 1000,
-    },
-    {
-      id: uid("log"),
-      type: "assigned",
-      title: "Battery #07 assigned to Port 1",
-      detail: "Charge started automatically",
-      timeMs: nowMs() - 2 * 60 * 60 * 1000 + 50 * 60 * 1000,
-    },
-  ]);
+  const [batteries, setBatteries] = useState<Battery[]>([]);
+  const [ports, setPorts] = useState<Port[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
 
-  const [batteryInput, setBatteryInput] = useState("5");
-  const [selectedPortId, setSelectedPortId] = useState<number>(4);
-  const [groupNameInput, setGroupNameInput] = useState("New group");
-  const [groupTargetInput, setGroupTargetInput] = useState("2h 30m");
+  const [batteryInput, setBatteryInput] = useState("");
+  const [selectedPortId, setSelectedPortId] = useState<number>(0);
+  const [groupNameInput, setGroupNameInput] = useState("");
+  const [groupTargetInput, setGroupTargetInput] = useState("");
   const [groupNotify, setGroupNotify] = useState(true);
   const [assignGroupId, setAssignGroupId] = useState<string>("group-a");
-  const [groupBatteryInput, setGroupBatteryInput] = useState("8");
+  const [groupBatteryInput, setGroupBatteryInput] = useState("");
   const [batteryFilter, setBatteryFilter] = useState<
   "all" | "charging" | "topping" | "full" | "ready" | "idle" | "out"
 >("all");
   const [groupFilter, setGroupFilter] = useState<string>("all");
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setNow(nowMs()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    NavigationBar.setHidden(true);
+  }, []);
+
+  useEffect(() => {
+  const load = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+
+      if (raw) {
+        const saved = JSON.parse(raw);
+
+        setBatteries(saved.batteries ?? []);
+        setPorts(saved.ports ?? Array.from({ length: 0 }, (_, i) => ({
+          id: i + 1,
+          amps: 0,
+          batteryId: null,
+        })));
+        setGroups(saved.groups ?? []);
+        setLogs(saved.logs ?? []);
+        setBatteryFilter(saved.batteryFilter ?? "all");
+      } else {
+        setPorts([]);
+        setBatteries([]);
+        setGroups([]);
+        setLogs([]);
+      }
+    } finally {
+      setHydrated(true);
+    }
+  };
+
+  load();
+}, []);
+
+useEffect(() => {
+  if (!hydrated) return;
+
+  AsyncStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      batteries,
+      ports,
+      groups,
+      logs,
+      batteryFilter,
+    })
+  );
+}, [hydrated, batteries, ports, groups, logs, batteryFilter]);
+  
 
   const augmentedBatteries = useMemo(
     () =>
@@ -405,6 +443,40 @@ function App() {
       `${reason === "removed" ? "Sent to field" : "Cleared for reassignment"} · ${groupName} · ${formatShort(total)} total${reached ? " · target met" : ""}`,
     );
   }
+
+  const confirmFactoryReset = () => {
+  Alert.alert(
+    "Factory Reset",
+    "This will delete all batteries, groups, charging history, and settings. This cannot be undone.",
+    [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Reset",
+        style: "destructive",
+        onPress: () => factoryReset(),
+      },
+    ]
+  );
+};
+
+  const factoryReset = async () => {
+  await AsyncStorage.removeItem(STORAGE_KEY);
+
+  const emptyPorts = Array.from({ length: 0 }, (_, i) => ({
+    id: i + 1,
+    amps: 6,
+    batteryId: null,
+  }));
+
+  setBatteries([]);
+  setPorts([]);
+  setGroups([]);
+  setLogs([]);
+  setBatteryFilter("all");
+};
 
   function assignBatteryToPort(batteryId: number, portId: number) {
     const battery = batteries.find((b) => b.id === batteryId);
@@ -671,6 +743,7 @@ function App() {
 
   return (
     <SafeAreaView style={styles.safe}>
+      <StatusBar hidden />
       <View style={styles.container}>
         <View style={styles.tabBar}>
           {TAB_ORDER.map((tab) => {
@@ -1087,7 +1160,7 @@ function App() {
                     <Pressable style={styles.ghostButton} onPress={exportCsv}>
                       <Text style={styles.ghostButtonText}>Export all data</Text>
                     </Pressable>
-                    <Pressable style={styles.removeButton} onPress={() => Alert.alert("Factory reset", "This demo keeps data in memory only. Refreshing the app clears everything.")}>
+                    <Pressable style={styles.removeButton} onPress={() => confirmFactoryReset()}>
                       <Text style={styles.removeButtonText}>Factory reset</Text>
                     </Pressable>
                   </View>
